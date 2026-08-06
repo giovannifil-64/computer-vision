@@ -132,9 +132,9 @@ def colors_by_nearest_class(points, ref_points, ref_classes):
     -------
     - `list`: Length-`N` colours from `GT_CLASS_COLORS`, giving every render the same legend.
     """
-    from scipy.spatial import cKDTree
+    from scipy.spatial import KDTree
 
-    idx = cKDTree(np.asarray(ref_points)).query(np.asarray(points))[1]
+    idx = KDTree(np.asarray(ref_points)).query(np.asarray(points))[1]
     return [GT_CLASS_COLORS.get(ref_classes[i], "white") for i in idx]
 
 

@@ -34,9 +34,8 @@ Notes
 import os
 import glob
 import numpy as np
-import trimesh
 from meshes import load_mesh
-from scipy.spatial import cKDTree
+from scipy.spatial import KDTree
 
 from common import load_center, load_clik_landmarks, load_gt_landmarks, GT_CLASS_COLORS
 
@@ -54,7 +53,7 @@ def nearest_distances(query, reference):
     -------
     - `np.ndarray`: `(N,)` nearest-neighbour distances in millimetres.
     """
-    return cKDTree(reference).query(query)[0]
+    return KDTree(reference).query(query)[0]
 
 
 def random_baseline(gt, surface, n_points, trials=20, seed=0):

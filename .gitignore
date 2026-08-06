@@ -1,0 +1,30 @@
+.DS_Store
+__pycache__/
+
+# Datasets — clinical data, several GB, never commit
+datasets/
+
+# Data derived from the datasets and inference outputs (regenerable)
+step1_landmarks/data/
+step1_landmarks/output/
+step2_alignment/data/
+step2_alignment/output/
+
+# Papers (redistribution not ours to make)
+papers/
+
+/report/
+
+docstring.template
+
+.vscode/
+_unused/
+
+# generazione dei materiali da condividere: non pubblicati per ora
+step2_alignment/scripts/reporting/make_chart.py
+step2_alignment/scripts/reporting/make_excel.py
+step2_alignment/scripts/watch_progress.sh
+
+# il foglio e i dati grezzi si rigenerano a ogni run
+step2_alignment/report/*.xlsx
+step2_alignment/report/data/
