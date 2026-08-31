@@ -28,7 +28,6 @@ import json
 import glob
 import argparse
 import numpy as np
-import trimesh
 from meshes import load_mesh
 
 # FDI (ISO-3950) -> Universal (1..32), the numbering CLIK expects.

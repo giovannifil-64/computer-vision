@@ -26,8 +26,8 @@ python landmark_accuracy.py --converted ../Data_prepost \
 Notes
 -----
 - The dataset's scheme (3-4 points per tooth: Pt0, Pt2, Pt3, Pt6) differs from
-  CLIK's (8-11 per tooth), so this is a coverage measure — "did CLIK put some
-  landmark on this true anatomical point?" — not a per-class identity match.
+  CLIK's (8-11 per tooth), so this is a coverage measure ("did CLIK put some
+  landmark on this true anatomical point?") rather than a per-class identity match.
 - Annotations live in the raw scan frame, so the converter's offset and rotation
   (stored in `center.json`) are applied to bring them into the same frame.
 """

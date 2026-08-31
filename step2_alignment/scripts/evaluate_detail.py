@@ -248,12 +248,26 @@ def analyse_excluded(converted_root, output_root):
 def main():
     """Run the analyses and write `metrics_detail.json` next to the other metrics."""
     ap = argparse.ArgumentParser(description="Collision, significance, tooth type and excluded teeth.")
-    ap.add_argument('--converted', required=True)
-    ap.add_argument('--output', required=True)
-    ap.add_argument('--report', required=True)
+    ap.add_argument('--converted', required=True, help='converter output (initial/ and final/)')
+    ap.add_argument('--output', required=True,
+                    help='a scored run, holding alignment_metrics.csv and the predicted meshes')
+    ap.add_argument('--report', required=True,
+                    help='where to write the result: a folder, which gets '
+                         'metrics_detail.json inside it, or a .json path to write directly')
     ap.add_argument('--collision-subjects', type=int, default=40,
                     help='subjects used for the collision measure; 0 skips it (it is the slow part)')
     args = ap.parse_args()
+
+    # The collision measure takes half an hour and the output path is only touched
+    # at the very end, so resolve and check it first: a typo should cost a second,
+    # not the whole run. A path ending in .json is taken as the file to write, which
+    # is what anyone naming a report file expects.
+    metrics = os.path.join(args.output, 'alignment_metrics.csv')
+    if not os.path.exists(metrics):
+        ap.error(f'{metrics} not found: score the run before analysing it')
+    report = (args.report if args.report.endswith('.json')
+              else os.path.join(args.report, 'metrics_detail.json'))
+    os.makedirs(os.path.dirname(os.path.abspath(report)), exist_ok=True)
 
     sids = sorted(os.path.basename(os.path.dirname(p))
                   for p in glob.glob(os.path.join(args.converted, '*', 'center.json')))
@@ -283,11 +297,11 @@ def main():
                   f"punti compenetrati {100*v['penetrating_fraction']:.2f}%")
     else:
         print('\nCollisione saltata (--collision-subjects 0); il valore gia calcolato viene conservato')
-        old = os.path.join(args.report, 'metrics_detail.json')
+        old = report
         if os.path.exists(old):
             res['collision'] = json.load(open(old)).get('collision', {})
 
-    out = os.path.join(args.report, 'metrics_detail.json')
+    out = report
     json.dump(res, open(out, 'w'), indent=2, ensure_ascii=False)
     print(f'\n-> {out}')
 

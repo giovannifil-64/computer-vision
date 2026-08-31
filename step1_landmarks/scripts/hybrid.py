@@ -31,7 +31,6 @@ import os
 import glob
 import json
 import numpy as np
-import trimesh
 from meshes import load_mesh
 from collections import defaultdict, Counter
 

@@ -5,7 +5,7 @@ A single, typed entry point for reading mesh files.
 
 `trimesh.load` may return a `Scene`, a `PointCloud` or a `Trimesh` depending on
 the file, so callers that immediately reach for `.vertices` are making an
-assumption the type checker cannot verify — and that occasionally fails at
+assumption the type checker cannot verify, and that occasionally fails at
 runtime on files holding more than one object. This wrapper states the
 assumption once and enforces it.
 

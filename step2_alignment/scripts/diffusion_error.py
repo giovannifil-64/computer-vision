@@ -36,7 +36,6 @@ import glob
 import json
 import argparse
 import numpy as np
-import trimesh
 from meshes import load_mesh
 
 def _find_clik_root():

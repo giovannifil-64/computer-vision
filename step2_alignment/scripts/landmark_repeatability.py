@@ -39,7 +39,6 @@ import shutil
 import tempfile
 import argparse
 import numpy as np
-import trimesh
 from meshes import load_mesh
 
 def _find_clik_root():
@@ -165,7 +164,7 @@ def main():
     if args.limit:
         sids = sids[:args.limit]
 
-    print(f'Loading detectors...')
+    print('Loading detectors...')
     models = load_detection(**CKPTS)
 
     pose_all, noise_all, per_subject = [], [], []

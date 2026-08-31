@@ -37,7 +37,6 @@ import json
 import glob
 import argparse
 import numpy as np
-import trimesh
 from meshes import load_mesh
 
 
