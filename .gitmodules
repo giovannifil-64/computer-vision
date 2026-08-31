@@ -1,0 +1,3 @@
+[submodule "CLIK-Diffusion"]
+	path = CLIK-Diffusion
+	url = https://github.com/giovannifil-64/CLIK-Diffusion.git

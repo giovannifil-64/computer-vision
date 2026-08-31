@@ -23,6 +23,7 @@ Functions
 - `ablation(runs, out_png)`: Each clinical constraint against the base loss.
 - `training(runs, out_png)`: Training and validation loss per epoch.
 - `timidity(predicted, tensors, out_png)`: Predicted motion against the real one.
+- `landmark_spread(tensors, out_png)`: How far each landmark moves between patients.
 - `main()`: Write whichever charts the given folders allow.
 
 Example
@@ -348,6 +349,61 @@ def timidity(predicted, tensors, out_png, limit=100):
     return _save(fig, out_png)
 
 
+def landmark_spread(tensors, out_png, limit=250):
+    """
+    How far each landmark moves between patients, one row per tooth position.
+
+    Parameters
+    ----------
+    - `tensors (str)`: Folder of prepared `.npz` files.
+    - `out_png (str)`: Where to write the figure.
+    - `limit (int, optional)`: Patients to read. Default `250`.
+
+    Returns
+    -------
+    - `str`: The written path.
+
+    Notes
+    -----
+    - The centroid is drawn apart because it does a different job: CLIK does not
+      predict it, so it says how much the crown itself varies. It is a reference
+      rather than a bound, and a sharp feature like a cusp tip can be steadier.
+    """
+    import sys as _sys
+    _sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from landmark_consistency import collect, spread, LANDMARK_IDS, TOOTH_TYPE
+
+    per_tooth = collect(tensors, limit)
+    teeth = [t for t in sorted(per_tooth) if len(per_tooth[t]) >= 30]
+    fig, ax = plt.subplots(figsize=(7.0, 6.4), facecolor=SURFACE)
+
+    for row, tid in enumerate(reversed(teeth)):
+        values, _ = spread(per_tooth[tid])
+        ax.scatter(values[1:], [row] * (len(values) - 1), s=14, c=BLUE, alpha=.75,
+                   linewidths=0, zorder=3, label='predicted landmark' if row == 0 else None)
+        ax.scatter(values[:1], [row], s=26, c=VERMILLION, marker='|', linewidths=1.6,
+                   zorder=4, label='centroid, not predicted' if row == 0 else None)
+
+    ax.set_yticks(range(len(teeth)))
+    ax.set_yticklabels([f'{t}  {TOOTH_TYPE[t][:3]}' for t in reversed(teeth)], fontsize=6.5)
+    ax.set_xlim(0, None)
+    _style(ax, '', 'movement between patients (mm)', 'tooth position')
+    ax.grid(axis='y', visible=False)
+    ax.tick_params(axis='y', length=0)
+    leg = ax.legend(loc='lower right', frameon=False, handletextpad=.4, borderpad=.3)
+    for text in leg.get_texts():
+        text.set_color(INK_SOFT)
+
+    fig.suptitle(f'A landmark should mark the same spot on everyone, and some do not',
+                 fontsize=10, color=INK, x=.012, ha='left', y=.98)
+    fig.text(.012, -.03, 'Every landmark of one tooth, over up to 250 patients, after position, '
+                         'orientation and size have been\nremoved. The centroid is not predicted '
+                         'by the network, so it says how much the crown itself varies.',
+             fontsize=7, color=INK_SOFT)
+    fig.tight_layout()
+    return _save(fig, out_png)
+
+
 def main():
     """Write whichever of the charts the given folders allow."""
     ap = argparse.ArgumentParser(description='Charts for the step-3 report.')
@@ -355,7 +411,10 @@ def main():
     ap.add_argument('--tuned', required=True, help='scored run of the fine-tuned model')
     ap.add_argument('--ablation', help='folder holding the abl_* runs')
     ap.add_argument('--predicted', help='.npz of the tuned run, for the calibration chart')
-    ap.add_argument('--tensors', help='prepared tensors, for the calibration chart')
+    ap.add_argument('--tensors', help='prepared tensors matching --predicted, for the '
+                                      'calibration chart')
+    ap.add_argument('--consistency', help='any folder of prepared tensors, for the landmark '
+                                          'spread chart; the training ones give the most patients')
     ap.add_argument('--out-dir', required=True)
     args = ap.parse_args()
     os.makedirs(args.out_dir, exist_ok=True)
@@ -365,6 +424,10 @@ def main():
         print('  ' + scatter([('CLIK as released', as_is, BLUE),
                               ('CLIK fine-tuned', tuned, VERMILLION)],
                              os.path.join(args.out_dir, 'models_vs_baseline.png')))
+
+    if args.consistency:
+        print('  ' + landmark_spread(args.consistency,
+                                     os.path.join(args.out_dir, 'landmark_spread.png')))
 
     if args.predicted and args.tensors:
         print('  ' + timidity(args.predicted, args.tensors,

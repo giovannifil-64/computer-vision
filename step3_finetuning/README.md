@@ -122,7 +122,8 @@ meshes, two are pure neural-network work that runs anywhere.
 The rest: `scripts/losses.py` implements the three clinical constraints,
 `scripts/dataset.py` the split, `scripts/compare_runs.py` produces the tables above,
 `scripts/diagnose.py` answers what kind of mistake a model is making rather than how
-big, and `scripts/evaluate_checkpoint.py` is the independent check that goes through
+big, `scripts/landmark_consistency.py` checks whether the detector's points mean the
+same thing on different patients, and `scripts/evaluate_checkpoint.py` is the independent check that goes through
 the authors' own `infer_crown.py`. `main.py` orchestrates the four stages.
 
 ## Usage
@@ -181,6 +182,35 @@ conversion or tensor preparation fails; they are 1% of the total, but not a rand
 | checkpoint loading | tensors differing from the released weights | 332 of 338 |
 | the split pipeline | against `infer_crown.py` | 0.0004° |
 | convergence | validation flat from epoch 10 | reached |
+
+## A limitation of the input: the landmarks are not all landmarks
+
+Everything here is fine-tuned on top of a detector that was left frozen, so it is
+worth asking whether its output means the same thing on every patient. It does
+not, and `scripts/landmark_consistency.py` measures it without needing annotations:
+superimpose one tooth's landmark set across 250 patients, removing position,
+orientation and size, and see how far each point still moves. The centroid is the
+thing to read that against, because CLIK does not predict it: it is the mean of
+the mesh vertices, so its spread says how much the crown itself varies.
+
+It is a reference and not a bound. Sixty one of the 228 predicted landmarks are
+steadier than their own centroid, which is what a cusp tip should be, being a
+sharper feature than the average of a crown whose extent depends on where the
+segmentation cut it. The median landmark sits at 1.17 times its centroid, so
+typically about level with it.
+
+The tail is what matters. Thirty one landmarks, 14% of them, scatter more than
+twice their centroid, and they are concentrated on the front of the mouth. On an
+incisor of radius 3 mm two landmarks move 3.8 and 4.2 mm from one patient to the
+next, further than the tooth's own radius, while on molars the worst stays under
+1.3 mm.
+
+It agrees with step 1, where CLIK's landmarks were compared against 3DTeethLand
+annotations on 85 unseen intra-oral scans: four of the six annotated classes land
+within half a millimetre, while the outer point and the facial axis point sit at
+2.5 and 2.9 mm and score no better than chance. Part of what the diffusion model
+is asked to work from is therefore noise with a fixed pattern, which is a ceiling
+on what fine-tuning the diffusion alone can reach.
 
 ## Two traps found along the way
 
