@@ -36,17 +36,22 @@ import os
 import sys
 import csv
 import argparse
+import importlib.util
 import numpy as np
 import pyvista as pv
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 BASE = os.path.dirname(os.path.dirname(os.path.dirname(HERE)))
 STEP2 = os.path.join(BASE, 'step2_alignment', 'scripts')
-sys.path.insert(0, os.path.join(STEP2, 'reporting'))
 sys.path.insert(0, STEP2)
 
-# step 2's renderer, reused wholesale; it resolves only with the paths set above
-from render_cases import load_stage, _add, UPPER
+# Step 2's renderer, reused wholesale. It is loaded by path and not by name
+# because that file is also called render_cases, so a plain import finds this one.
+_spec = importlib.util.spec_from_file_location(
+    'step2_render_cases', os.path.join(STEP2, 'reporting', 'render_cases.py'))
+_step2 = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_step2)
+load_stage, _add, UPPER = _step2.load_stage, _step2._add, _step2.UPPER
 
 LOWER = set(range(17, 33))
 
