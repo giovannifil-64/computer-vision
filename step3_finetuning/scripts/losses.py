@@ -16,15 +16,21 @@ cutting the rotation error by 8% (p = 4e-4); **arch** hurts, badly, and lowering
 its weight does not rescue it: at the published 0.1 the rotation error goes from
 8.0 to 15.0 degrees with not one subject of a hundred improved, and at 0.001 it
 still goes to 9.8 (+21%, p < 0.001). The harm shrinks with the weight but never
-turns into a benefit, so this is not only a mis-scaled hyper-parameter.
+turns into a benefit. That does not rule out a scale problem, because in these
+normalised units the term is huge: in the first epoch the weighted arch term is
+about two thousand times the reconstruction loss at 0.1 and about thirty times at
+0.001, and at the end of the 0.001 run the two are the same size.
 
-A likely mechanism, worth testing before writing the term off for good: the loss
-compares fourth-order polynomial coefficients, which are badly conditioned (small
-changes in tooth position swing the high-order terms a long way), and it is
-evaluated at a uniformly random diffusion timestep, so most of the time it is
-fitting a polynomial to a dentition the model has barely begun to denoise. Fitting
-noise produces meaningless coefficients and enormous gradients. Restricting the
-term to low noise levels would test that directly.
+A likely mechanism: the loss compares fourth-order polynomial coefficients, which
+are badly conditioned (small changes in tooth position swing the high-order terms a
+long way), so the term can push the teeth towards matching coefficients rather than
+towards a better arch. The noise is not the cause. Every term here is computed on
+the clean landmarks the network predicts, not on the noisy input, and since that
+prediction barely depends on the noisy input the arch term sees almost the same
+finished dentition at every timestep. Weighting it by noise level would therefore
+amount to lowering its weight. The experiments that remain are a much smaller
+weight, since at 0.001 the term is still as large as the reconstruction loss, and a
+comparison of the two curves at the tooth positions instead of their coefficients.
 
 
 None of the index bookkeeping is invented here. CLIK's `core_util` already ships

@@ -1,8 +1,8 @@
 # Step 2: does CLIK align teeth as released?
 
-Step 1 showed the landmark detector transfers reasonably to intra-oral scans. This step asks the question that actually matters: given a pre-treatment dentition, does CLIK move the teeth where an orthodontist moved them?
+Step 1 showed the landmark detector transfers reasonably to intra-oral scans. This step asks the question that actually matters: given a pre-treatment dentition, does CLIK move the teeth where the orthodontist's plan puts them?
 
-PrePostOrthodontic gives pairs of scans of the same patient, before and after treatment. The two are the same meshes rigidly moved, so the true motion of every tooth is exactly recoverable, which makes both the ground truth and the error decomposition exact rather than approximate.
+PrePostOrthodontic pairs each pre-treatment scan with a digitally simulated target, a treatment plan designed by a technician and approved by an orthodontist, not a scan taken after treatment. The target teeth are the same meshes rigidly moved, so the true motion of every tooth is exactly recoverable, which makes both the target and the error decomposition exact rather than approximate.
 
 Nothing is retrained here. This is CLIK exactly as the authors published it.
 
@@ -18,7 +18,7 @@ Per tooth, mean and standard deviation over 246 subjects and 6223 teeth. "No mov
 
 By median and win rate: rotation 8.99 against 8.59, with CLIK better on 48% of teeth; translation 1.81 against 1.58, 43%; point cloud 2.47 against 1.53, 24%.
 
-On rotation it ties with doing nothing, on position it is clearly worse. The error is largest exactly where the real treatment moved teeth least, which says the model applies a textbook correction where the clinical plan asked for very little.
+On rotation it ties with doing nothing, on position it is clearly worse. The error is largest exactly where the plan moves teeth least, which suggests the model applies a textbook correction where the plan asks for very little.
 
 ## Where the error comes from
 
@@ -26,19 +26,19 @@ Because the true transforms are exact, the three stages can be measured separate
 
 | stage | what is compared | result |
 |---|---|---|
-| 1, landmark detection | landmarks found on the post scan against landmarks found on the pre scan carried through the true motion | 0.10 mm median, below the 0.31 mm noise floor of the random sampling |
+| 1, landmark detection | landmarks found on the target crowns against landmarks found on the pre-treatment crowns carried through the true motion | 0.10 mm median, below the 0.31 mm noise floor of the random sampling |
 | 2, diffusion | predicted target landmarks against the ideal ones, the detected landmarks under the true motion | 2.92 mm median |
 | 3, rigid fit | the part of the predicted landmark cloud that is not a rigid motion, so cannot be represented | 0.71 mm median |
 
 The error is concentrated in the diffusion. Stage 1 is repeatable: shown the same tooth in a different pose it picks the same points, and the residual is fully explained by the random start of the farthest-point sampling. Stage 3 loses little, because the predicted cloud is very nearly a rigid motion of the input, just the wrong one. What stage 2 predicts sits about 3 mm from where the teeth had to go.
 
-An independent check agrees: the diffusion error in landmark space, 2.92 mm, matches the end-to-end point-cloud error measured on the meshes, 3.10 mm, and the two are computed by different routes. This is what pointed the fine-tuning in step 3 at the diffusion model alone.
+An independent check agrees: the diffusion error in landmark space, 2.92 mm, matches the median point-cloud error measured on the meshes over all the teeth of the same 40 subjects, 2.89 mm, and the two are computed by different routes. This is what pointed the fine-tuning in step 3 at the diffusion model alone.
 
 ## Is it just noise?
 
 The diffusion is generative, so the whole evaluation was repeated with five seeds on 40 subjects. The per-subject spread is 0.075 mm on point cloud and 0.69° on rotation, while the distance from the no-movement reference is 1.147 mm, about fifteen times the spread. The error is systematic and one seed is enough.
 
-The gap to the reference is significant on all three metrics, by paired t-test and confirmed by Wilcoxon: p = 6e-3 for rotation, 6e-10 for translation, 3.6e-33 for point cloud.
+The gap to the reference is significant on all three metrics by the paired Wilcoxon test on the per-subject medians, p = 2e-2 for rotation, 1e-8 for translation and 4e-32 for point cloud, and the paired t-test used by the paper agrees, with p = 6e-3, 6e-10 and 4e-33.
 
 ## Collision and tooth type
 
@@ -47,10 +47,10 @@ The paper's fourth metric, how far neighbouring teeth end up inside one another,
 | dentition | penetration depth | penetrating points |
 |---|---|---|
 | pre-treatment | 0.003 mm | 0.24% |
-| CLIK prediction | 0.383 mm | 4.30% |
-| ground truth | 0.154 mm | 0.98% |
+| CLIK prediction | 0.397 mm | 4.26% |
+| simulated target | 0.141 mm | 1.00% |
 
-Some penetration is expected, since treatment brings teeth into tight contact, which is why the ground truth is not zero. The prediction is two and a half times deeper and affects four times more points.
+Some penetration is expected, since treatment brings teeth into tight contact, which is why the simulated target is not zero. The prediction is nearly three times deeper and affects four times more points.
 
 By tooth type, median with the baseline in brackets: incisor 10.81° (10.97) and 2.79 mm (2.19); canine 10.06° (11.16) and 2.71 mm (2.00); premolar 9.19° (8.91) and 2.15 mm (1.33); molar 6.91° (5.41) and 2.39 mm (1.02). Molars look best in absolute terms but are the worst against the baseline, because they barely move. CLIK holds up best on the anterior teeth, the ones treatment actually repositions.
 
@@ -58,13 +58,13 @@ By tooth type, median with the baseline in brackets: incisor 10.81° (10.97) and
 
 The dataset is never modified, everything runs on a converted copy. The conversion cuts per-tooth meshes out of the arch using the supplied segmentation, renumbers from FDI to the Universal scheme CLIK expects, and applies one rigid transform to place the dentition in CLIK's canonical jaw frame.
 
-That last step is not cosmetic, because **CLIK is not orientation invariant**: its diffusion model learned arch shape in a fixed frame, anterior along -x, patient right along +y, upper arch along +z. This dataset is not consistently oriented, and 186 of 247 subjects have the upper arch below the lower one. Using a single fixed rotation taken from one subject made the results much worse, 13.25° against a 9.41° baseline, simply because most dentitions were fed in upside down. The frame is therefore estimated per subject from anatomy, incisors against molars, upper against lower, right against left, orthonormalised onto CLIK's axes with a determinant check so the anatomy is never mirrored.
+That last step is not cosmetic, because **CLIK is not orientation invariant**: its diffusion model learned arch shape in a fixed frame, anterior along -x, patient right along +y, upper arch along +z. This dataset is not consistently oriented: of the 248 test subjects whose frame can be estimated, only 61 share the orientation of the first one, with the upper arch below the lower, while the other 187 have it above. Using a single fixed rotation taken from one subject made the results much worse, 13.25° against a 9.41° baseline, simply because most dentitions were fed in upside down. The frame is therefore estimated per subject from anatomy, incisors against molars, upper against lower, right against left, orthonormalised onto CLIK's axes with a determinant check so the anatomy is never mirrored.
 
 The same transform is applied to both stages, so the movement being measured is untouched: per-tooth rotations and displacements are identical before and after conversion.
 
 ## Teeth left out of the metrics
 
-152 third molars are never predicted, because CLIK's scheme covers 28 teeth. 335 teeth were extracted during treatment and are absent from the post-treatment scan; CLIK does not know that and moves them anyway, by a median of 2.68 mm. Another 93 teeth were re-tessellated between the two scans, leaving no point correspondence to measure.
+152 third molars are never predicted, because CLIK's scheme covers 28 teeth. 232 further teeth are absent from the simulated target, 310 with the 78 absent third molars, and the data do not say whether they were extracted; CLIK does not know they are absent and still moves them, shifting their centroids by a median of 1.72 mm. Another 93 teeth have different vertex counts in the two meshes, leaving no point correspondence to measure.
 
 ## Usage
 
@@ -96,6 +96,6 @@ Inference is the slow part. Everything else runs in minutes.
 | file | what it shows |
 |---|---|
 | `report/figures/clik_vs_baseline.png` | every subject as a point against the no-movement reference. Above the diagonal means worse than doing nothing: 56% for rotation, 83% for position |
-| `report/figures/0791_comparison.png` | best case, initial and prediction and ground truth, both arches |
+| `report/figures/0791_comparison.png` | best case, initial and prediction and simulated target, both arches |
 | `report/figures/0327_comparison.png` | median case, where the prediction opens gaps and breaks the arch |
 | `report/figures/0944_comparison.png` | worst case |

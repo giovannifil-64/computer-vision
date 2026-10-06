@@ -2,8 +2,8 @@
 render_cases
 ============
 Render the four-way comparison a reader needs in order to believe the tables:
-the dentition before treatment, where CLIK as released puts it, where the
-fine-tuned model puts it, and where it actually ended up.
+the dentition before treatment, where CLIK as-is puts it, where the
+fine-tuned model puts it, and where the simulated target puts it.
 
 Step 2 already renders a three-column version of this. That code is reused rather
 than copied: the mesh loading, the per-arch camera and the tooth material all
@@ -75,7 +75,7 @@ def render_subject(sid, converted, runs, out_dir, size=(3000, 1500)):
     columns = [(load_stage(sid, 'initial', converted, None), 'Initial (pre-treatment)')]
     for root, title in runs:
         columns.append((load_stage(sid, 'pred', converted, root), title))
-    columns.append((load_stage(sid, 'final', converted, None), 'Ground truth (post-treatment)'))
+    columns.append((load_stage(sid, 'final', converted, None), 'Simulated target'))
     if not all(teeth for teeth, _ in columns):
         return None
 
@@ -145,7 +145,7 @@ def main():
     args = ap.parse_args()
 
     subjects = args.subjects or pick_cases(os.path.join(args.tuned, 'alignment_metrics.csv'))
-    runs = [(args.as_is, 'CLIK as released'), (args.tuned, 'CLIK fine-tuned')]
+    runs = [(args.as_is, 'CLIK as-is'), (args.tuned, 'CLIK fine-tuned')]
     for sid in subjects:
         path = render_subject(sid, args.converted, runs, args.out_dir)
         print(f'  {sid}: {path or "skipped, data missing"}', flush=True)

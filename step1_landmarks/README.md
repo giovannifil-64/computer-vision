@@ -30,9 +30,9 @@ The detector also behaves sensibly in the basic sense: it produces the expected 
 
 3. **The metric.** For each annotated landmark, the distance to the nearest CLIK landmark of any type. This is a coverage measure and deliberately not a per-class match, because the two schemes are different and CLIK cannot be blamed for not using someone else's definitions. Repeating the same measurement with random surface points gives the chance level, and the skill score is one minus the ratio of the two medians.
 
-4. **Hybrid completion.** `hybrid.py` turns CLIK's output into the full six-class scheme, in two parts. For the four classes CLIK covers it relabels CLIK's own landmarks, using a map from CLIK id to class learned on a subject that has annotations; the map transfers because it is defined per tooth type, not per patient. For the two classes CLIK has no equivalent of, it ignores CLIK and computes them from the crown geometry: the outer point as the most buccal vertex on the gingival margin, the facial axis point as the centre of the facial surface.
+4. **Hybrid completion.** `hybrid.py` turns CLIK's output into the full six-class scheme, in two parts. For the four classes CLIK covers it relabels CLIK's own landmarks, using a map from CLIK id to class learned on a subject that has annotations and defined per tooth type. For the two classes CLIK has no equivalent of, it ignores CLIK and computes them from the crown geometry: the outer point as the most buccal vertex on the gingival margin, the facial axis point as the centre of the facial surface.
 
-On the one subject where the hybrid was scored class by class, the geometric half is the clear success: the facial axis point goes from 2.75 mm with CLIK to 0.72 mm when derived from the surface. That is worth stating plainly, because it means these landmarks are geometric definitions and do not need a network at all.
+`evaluate_hybrid.py` scores the hybrid class by class, comparing each annotation only with hybrid landmarks of its own class, on the 84 patients not used to learn the map. The geometric half is the clear success, with the facial axis point at a median of 0.85 mm from its annotation and the outer point at 1.60 mm (skill 0.80 and 0.72), which means these two landmarks are geometric definitions and do not need a network at all. The relabelled half depends on which patient the map is learned on: the cusp (0.55 mm) and the distal point (about 1.2 mm) are stable, while the mesial and inner points range from about 1 to 2.8 mm across three choices of map patient.
 
 ## Usage
 
@@ -53,6 +53,7 @@ The driver works in two passes. It converts every patient and runs inference, le
 | `scripts/common.py` | paths, landmark loading, coordinate frames, the shared palette |
 | `scripts/evaluate.py` | the coverage metric, the random baseline and the skill score |
 | `scripts/hybrid.py` | relabel four classes, derive the other two from geometry |
+| `scripts/evaluate_hybrid.py` | score the hybrid class by class on the patients not used for the map |
 | `scripts/visualize.py` | per-arch renders, occlusal view, landmarks as coloured spheres |
 | `scripts/run_all.py` | the two-pass driver |
 
@@ -60,6 +61,6 @@ Each patient gets up to three images sharing one camera and one colour legend, s
 
 ## Limitations
 
-The comparison is a coverage proxy. CLIK and 3DTeethLand define landmarks differently, and the map bridging them is learned from a single annotated subject, so the per-class hybrid figures are indicative rather than solid. The aggregate CLIK numbers over 85 scans are the reliable part.
+The main comparison is a coverage proxy, because CLIK and 3DTeethLand define landmarks differently. The class-by-class scores of the hybrid close part of that gap, but the relabelled classes rest on a map learned from a single annotated subject and change with that choice, so only the geometric classes and the cusp are solid there.
 
 More fundamentally, this measures CLIK outside its intended task. It was built to align teeth, not to reproduce someone else's landmark scheme, and its alignment stages cannot be judged here at all because Teeth3DS has no post-treatment scan to compare against and the two arches are not registered into occlusion. That is what step 2 is for.

@@ -55,7 +55,7 @@ def split_subjects(files, n_val=100, seed=0):
     - `ValueError`: If `n_val` leaves no training data.
     """
     if n_val >= len(files):
-        raise ValueError(f'n_val={n_val} non lascia dati di addestramento ({len(files)} file)')
+        raise ValueError(f'n_val={n_val} leaves no training data ({len(files)} files)')
     order = np.random.default_rng(seed).permutation(len(files))
     val_idx = set(order[:n_val].tolist())
     train = [f for i, f in enumerate(files) if i not in val_idx]

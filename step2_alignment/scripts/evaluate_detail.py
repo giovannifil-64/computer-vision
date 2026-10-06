@@ -13,7 +13,7 @@ Functions
 - `analyse_collision(sids, ...)`: Collision for initial / prediction / ground truth.
 - `analyse_significance(csv_path)`: Paired tests of CLIK vs the baseline.
 - `analyse_by_tooth_type(...)`: Errors split by incisor / canine / premolar / molar.
-- `analyse_excluded(...)`: What happens to extracted teeth and third molars.
+- `analyse_excluded(...)`: What happens to the teeth absent from the target and to third molars.
 - `main()`: Run the requested analyses and write a JSON summary.
 
 Example
@@ -64,6 +64,12 @@ def dentition(sid, stage, converted_root, output_root):
     Returns
     -------
     - `dict`: `{tooth_id: trimesh.Trimesh}`.
+
+    Notes
+    -----
+    - A run scored from `transformation.json` alone, as in step 3, has no exported
+      meshes. The prediction is then rebuilt by applying each tooth's transform to
+      its initial mesh, which is exactly what CLIK does before exporting.
     """
     pat = (os.path.join(output_root, sid, 'results', '*.ply') if stage == 'pred'
            else os.path.join(converted_root, sid, stage, '*.stl'))
@@ -72,6 +78,13 @@ def dentition(sid, stage, converted_root, output_root):
         name = os.path.basename(f).rsplit('.', 1)[0]
         if name.isdigit():
             out[int(name)] = load_mesh(f)
+    tf = os.path.join(output_root or '', sid, 'results', 'transformation.json')
+    if stage == 'pred' and not out and os.path.exists(tf):
+        transforms = {int(k.split('-')[1]): np.asarray(v, float)
+                      for k, v in json.load(open(tf)).items()}
+        for tid, mesh in dentition(sid, 'initial', converted_root, None).items():
+            if tid in transforms:
+                out[tid] = mesh.apply_transform(transforms[tid])
     return out
 
 
@@ -127,7 +140,13 @@ def analyse_collision(sids, converted_root, output_root, samples=600):
     Returns
     -------
     - `dict`: Median depth and penetrating fraction per state.
+
+    Notes
+    -----
+    - The surface points are drawn at random, so the generator is seeded here and
+      the same run gives the same figures.
     """
+    np.random.seed(0)
     res = {k: {'depth': [], 'frac': []} for k in ('initial', 'pred', 'final')}
     for i, sid in enumerate(sids, 1):
         for stage in res:
@@ -205,43 +224,56 @@ def analyse_by_tooth_type(sids, converted_root, output_root):
             for k, v in acc.items() if v['rot']}
 
 
-def analyse_excluded(converted_root, output_root):
+def analyse_excluded(sids, converted_root, output_root):
     """
     Account for the teeth left out of the metrics.
 
     Parameters
     ----------
-    - `converted_root (str)`: Converter output root.
-    - `output_root (str)`: CLIK output root.
+    - `sids (list)`: The cases the run scored.
+    - `converted_root (str)`: Converter output (holds `initial/` and `final/`).
+    - `output_root (str)`: Scored run (holds `<sid>/results/transformation.json`).
 
     Returns
     -------
-    - `dict`: Counts and, for teeth extracted during treatment, how far CLIK moved them.
+    - `dict`: How many third molars are never predicted, how many teeth are absent
+      from the simulated target, and how far CLIK moves the latter.
 
     Notes
     -----
-    - CLIK's scheme covers 28 teeth, so third molars are never predicted; teeth
-      extracted during treatment are absent from the ground truth but CLIK, not
-      knowing about the extraction, still proposes a position for them.
+    - CLIK's scheme covers 28 teeth, so third molars are never predicted. Teeth
+      present in the pretreatment model but absent from the simulated target have
+      no target to be scored against; whether they were extracted cannot be told
+      from the data. CLIK, not knowing they are absent, still moves them.
+    - The motion of a tooth is measured as the displacement of its centroid,
+      `|R c + t - c|`. The translation `t` of the stored matrix alone would not do,
+      because the rotation acts about the origin of the dentition rather than about
+      the tooth, so `t` also carries the effect of the rotation.
     """
-    n_third = n_extracted = 0
+    n_third = n_absent = n_absent_third = 0
     moved = []
-    for meta_f in glob.glob(os.path.join(converted_root, '*', 'center.json')):
-        sid = os.path.basename(os.path.dirname(meta_f))
-        meta = json.load(open(meta_f))
-        extracted = set(meta.get('extracted', []))
-        n_third += len([t for t in meta.get('teeth_ori', []) if t in THIRD_MOLARS])
-        n_extracted += len(extracted)
+    for sid in sids:
+        ini = {int(os.path.basename(f)[:-4]): f
+               for f in glob.glob(os.path.join(converted_root, sid, 'initial', '*.stl'))}
+        fin = {int(os.path.basename(f)[:-4])
+               for f in glob.glob(os.path.join(converted_root, sid, 'final', '*.stl'))}
+        n_third += len(set(ini) & THIRD_MOLARS)
+        absent = set(ini) - fin
+        n_absent_third += len(absent & THIRD_MOLARS)
+        absent -= THIRD_MOLARS
+        n_absent += len(absent)
         tf = os.path.join(output_root, sid, 'results', 'transformation.json')
-        if not (extracted and os.path.exists(tf)):
+        if not (absent and os.path.exists(tf)):
             continue
         tr = {int(k.split('-')[1]): np.asarray(v, float) for k, v in json.load(open(tf)).items()}
-        for t in extracted:
+        for t in absent:
             if t in tr:
-                moved.append(float(np.linalg.norm(tr[t][:3, 3])))
+                c = load_mesh(ini[t], process=False).vertices.mean(0)
+                moved.append(float(np.linalg.norm(tr[t][:3, :3] @ c + tr[t][:3, 3] - c)))
     return {'third_molars_never_predicted': n_third,
-            'teeth_extracted_during_treatment': n_extracted,
-            'displacement_applied_to_extracted_teeth_mm':
+            'absent_from_target_besides_third_molars': n_absent,
+            'absent_third_molars': n_absent_third,
+            'centroid_displacement_of_absent_teeth_mm':
                 {'median': float(np.median(moved)), 'n': len(moved)} if moved else None}
 
 
@@ -269,8 +301,14 @@ def main():
               else os.path.join(args.report, 'metrics_detail.json'))
     os.makedirs(os.path.dirname(os.path.abspath(report)), exist_ok=True)
 
+    # Only the cases this run actually scored. The converter folder can hold the
+    # training cases as well, and taking the first N of those would measure the
+    # prediction on some cases and the initial and final dentitions on others.
+    with open(metrics) as fh:
+        scored = {r['subject'] for r in csv.DictReader(fh)}
     sids = sorted(os.path.basename(os.path.dirname(p))
-                  for p in glob.glob(os.path.join(args.converted, '*', 'center.json')))
+                  for p in glob.glob(os.path.join(args.converted, '*', 'center.json'))
+                  if os.path.basename(os.path.dirname(p)) in scored)
     res = {}
 
     print('Significativita statistica...')
@@ -280,7 +318,7 @@ def main():
               f"p(t)={v['p_ttest']:.2e}  p(wilcoxon)={v['p_wilcoxon']:.2e}")
 
     print('\nDenti esclusi...')
-    res['excluded'] = analyse_excluded(args.converted, args.output)
+    res['excluded'] = analyse_excluded(sids, args.converted, args.output)
     print('  ' + json.dumps(res['excluded'], ensure_ascii=False))
 
     print('\nDettaglio per tipo di dente...')
