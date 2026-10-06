@@ -7,7 +7,7 @@ Computer Vision exam project, Università degli Studi di Milano.
 ## Setup
 
 > [!NOTE]
-> Even tho you could run the code in a virtual environment, I recommended to use a conda environment, as it is easier to manage dependencies and avoid conflicts.
+> Even though you could run the code in a virtual environment, I recommend using a conda environment, as it is easier to manage dependencies and avoid conflicts.
 
 ```bash
 git clone --recurse-submodules https://github.com/giovannifil-64/computer-vision.git
@@ -18,11 +18,11 @@ pip install -r requirements.txt
 
 If you cloned without `--recurse-submodules`, the `CLIK-Diffusion` folder is empty and nothing runs. Fix it with `git submodule update --init`.
 
-Then download CLIK's five checkpoints from the link in `CLIK-Diffusion/Code/checkpoint/download.txt` and put them in that folder. They are 3.3 GB, which is why they are not in the repository.
+Then download CLIK's checkpoints from the link in `CLIK-Diffusion/Code/checkpoint/download.txt` and put them in that folder. The authors release nine of them, 3.6 GB in total, which is why they are not in the repository; the crown-only mode used here needs five, the four `[Crown]` landmark detectors and `diffusion-e20000.pth`.
 
 ## Datasets
 
-Neither dataset is in the repository. Teeth3DS is public, PrePostOrthodontic is clinical data under an access agreement. Arrange them like this:
+Neither dataset is in the repository. Teeth3DS+ is public, PrePostOrthodontic is clinical data under an access agreement. Arrange them like this:
 
 ```
 datasets/
@@ -30,12 +30,12 @@ datasets/
 │   ├── data_part_1 … data_part_7/     one folder per part, each with upper/ and lower/
 │   └── osfstorage-archive/            3DTeethLand landmark annotations
 └── step2_prepost/
-    ├── Orthodontic_dental_dataset/    one folder per patient, each with ori/ and final/
+    ├── Orthodontic_dental_dataset/    one folder per case, each with ori/ and final/
     ├── train_ids.txt, test_ids.txt    the official split, taken from the dataset paper
     └── Landmark_annotation/
 ```
 
-Each patient folder in `Orthodontic_dental_dataset` holds `U_Ori.stl` and `L_Ori.stl` with their `.json` segmentations, and the same for `_Final`.
+Each case folder in `Orthodontic_dental_dataset` holds `U_Ori.stl` and `L_Ori.stl` with their `.json` segmentations in `ori/`, and the same for `_Final` in `final/`. A case is one treatment phase, so a patient can have several.
 
 ## Running
 
@@ -43,26 +43,26 @@ Every step is driven by its own `main.py` and works in stages, so a run can be r
 
 ### Step 1: are CLIK's landmarks any good on intra-oral scans?
 
-Runs the pretrained landmark detector on Teeth3DS and scores it against the 3DTeethLand annotations.
+Runs the pretrained landmark detector on the 85 Teeth3DS+ patients annotated on both arches and scores it against the 3DTeethLand annotations.
 
 ```bash
 python step1_landmarks/main.py
 ```
 
-Four of the six annotated landmark classes land within half a millimetre; the outer point and the facial axis point do no better than chance. Details in [`step1_landmarks/README.md`](step1_landmarks/README.md).
+For four of the six annotated landmark classes the nearest CLIK landmark lies 0.48 to 0.72 mm away, about three times closer than random points. CLIK has no landmark near the outer point and the facial axis point, but both can be computed from the crown geometry, at 0.85 and 1.60 mm. Details in [`step1_landmarks/README.md`](step1_landmarks/README.md).
 
-### Step 2: does CLIK align teeth as released?
+### Step 2: does CLIK align teeth as-is?
 
-Converts PrePostOrthodontic into CLIK's format, runs inference, and compares the predicted dentition against the real post-treatment scan.
+Converts PrePostOrthodontic into CLIK's format, runs inference on the 246 test cases, and compares the predicted dentition against the post-treatment target, a digital plan approved by an orthodontist.
 
 ```bash
 python step2_alignment/main.py --stages convert,infer,evaluate,figures
 ```
 
-It does not. The error is no smaller than the error of not moving the teeth at all, and the stage-by-stage breakdown puts the blame on the diffusion model rather than the detector. Details in [`step2_alignment/README.md`](step2_alignment/README.md).
+It does not. CLIK does worse than leaving the teeth where they are in most cases, beating that reference in only 44% of the cases in rotation and 17% in point-cloud distance, and the stage-by-stage breakdown puts the blame on the diffusion model rather than the detector. Details in [`step2_alignment/README.md`](step2_alignment/README.md).
 
 
-### Step 3: does retraining fix it?
+### Step 3: does fine-tuning fix it?
 
 Fine-tunes the diffusion model alone, then scores it the same way as step 2.
 
@@ -72,7 +72,7 @@ python step3_finetuning/main.py --stages b --individual 0.01 --epochs 300
 python step3_finetuning/main.py --stages c,d,evaluate --steps 1
 ```
 
-Yes, partly. See [`step3_finetuning/README.md`](step3_finetuning/README.md) for the numbers, the ablation of the paper's clinical constraints, and why `--steps 1` gives the same answer as the full 2000.
+Yes, partly: the fine-tuned model beats leaving the teeth in place in 70% of the cases in rotation and 55% in point-cloud distance, and beats the average motion in rotation and translation but not in position. See [`step3_finetuning/README.md`](step3_finetuning/README.md) for the numbers, the ablation of the paper's clinical constraints, and why `--steps 1` gives the same answer as the full 2000.
 
 ## Structure
 
@@ -80,10 +80,10 @@ Yes, partly. See [`step3_finetuning/README.md`](step3_finetuning/README.md) for 
 CLIK-Diffusion/        submodule: fork of the original method, patched for CPU and MPS
 datasets/              not in the repository, see above
 step1_landmarks/       landmark quality on intra-oral scans
-step2_alignment/       the method as released, on pre and post treatment pairs
-step3_finetuning/      retraining the diffusion model, and what it buys
-papers/                the method paper and the dataset paper (WIP)
-report/                the written report
+step2_alignment/       the method as-is, on pre and post treatment pairs
+step3_finetuning/      fine-tuning the diffusion model, and what it buys
+papers/                the method paper and the papers of the two datasets
+report/                the written report, as a PDF, with its LaTeX source in src/
 ```
 
 Each step keeps `scripts/` for its code, `data/` for converted input, `output/` for results and `report/` for what is meant to be shared. Only the last is versioned.
