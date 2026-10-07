@@ -136,7 +136,7 @@ def evaluate_subject(sid, converted_root, models, network):
         idx = [i] + list(range(s, e))
         L_ini = initial[:, idx].T * SCALE
         L_pred = predicted[:, idx].T * SCALE
-        L_ideal = (R @ L_ini.T).T + tid
+        L_ideal = (R @ L_ini.T).T + t
 
         diff.append(np.linalg.norm(L_pred - L_ideal, axis=1))
         Rp, tp, rms = kabsch(L_ini, L_pred)
