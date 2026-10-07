@@ -72,7 +72,7 @@ def load_gt(sid, dataset_root, converted_root, stage='ori'):
                          f'{arch}_{tag}_landmarks.json')
         if not os.path.exists(p):
             continue
-        for entry in json.load(open(p))['landmarks'][1:]:      # [0] is jaw metadata
+        for entry in json.load(open(p))['landmarks'][1:]:  # [0] is jaw metadata
             for fdi_str, pts in entry.items():
                 if not fdi_str.isdigit() or int(fdi_str) not in FDI2U:
                     continue
@@ -134,6 +134,7 @@ def main():
     ap.add_argument('--converted', required=True)
     ap.add_argument('--dataset', required=True, help='root holding Landmark_annotation/')
     ap.add_argument('--limit', type=int, default=0)
+    ap.add_argument('--ids', default=None, help='file listing the cases to use, one per line (default: all)')
     ap.add_argument('--stage', default='ori', choices=['ori', 'final'],
                     help='pre-treatment (ori) or post-treatment (final) crowns')
     ap.add_argument('--out', default=None)
@@ -142,6 +143,9 @@ def main():
     sids = sorted(os.path.basename(d) for d in
                   glob.glob(os.path.join(args.dataset, 'Landmark_annotation', '*'))
                   if os.path.isdir(d) and os.path.exists(os.path.join(args.converted, os.path.basename(d), 'center.json')))
+    if args.ids:
+        wanted = {l.strip() for l in open(args.ids) if l.strip()}
+        sids = [s for s in sids if s in wanted]
     if args.limit:
         sids = sids[:args.limit]
 

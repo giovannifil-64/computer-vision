@@ -2,10 +2,13 @@
 main
 ====
 Run the whole step-2 evaluation with one command: convert the dataset, run CLIK
-as-is on every subject, score the prediction against the post-treatment scan,
-produce the diagnostics that localise the error, and write the figures and the
-spreadsheet. Every stage is skipped automatically when its output already exists,
-so the script can be re-run to resume or to refresh a single part.
+as-is on every test case, score the prediction against the post-treatment target,
+the digital plan approved by an orthodontist, produce the diagnostics that localise
+the error, and write the figures and the spreadsheet. The long stages skip the
+work already done: conversion skips the cases already converted, inference and the
+seed study the cases that already have a result, so the script can be re-run to
+resume after an interruption. Evaluation, diagnostics, figures and the workbook
+are short and are recomputed every time; `--stages` picks which ones to run.
 
 Functions
 ---------
@@ -31,6 +34,10 @@ Notes
 -----
 - CLIK resolves its checkpoints relative to the working directory, so inference is
   launched from inside the CLIK-Diffusion folder.
+- Every stage works on the cases listed in `--ids`, by default `test_ids.txt` in the
+  dataset folder. Step 3 converts its training cases into the same `Data_prepost`
+  folder, so without the list the inference and the diagnostics on "the first 40"
+  would also run on training cases.
 - Long stages print progress; the whole run on 250 subjects takes a few hours,
   almost all of it in the diffusion sampling.
 """
@@ -80,18 +87,45 @@ def run(name, fn):
     t0 = time.time()
     try:
         fn()
-    except Exception as exc:                        # keep going: later stages may still work
+    except Exception as exc:
         print(f'!! {name} interrotto: {exc}')
         return False
     print(f'-- {name} completato in {time.time() - t0:.0f}s')
     return True
 
 
+def test_ids(cfg):
+    """
+    The ids of the test cases, or `None` when the list is missing.
+
+    Parameters
+    ----------
+    - `cfg (Namespace)`: Parsed arguments, with `ids` the path of the list.
+
+    Returns
+    -------
+    - `set` or `None`: The case ids to keep, or `None` to keep every case.
+    """
+    if os.path.exists(cfg.ids):
+        return {l.strip() for l in open(cfg.ids) if l.strip()}
+    print(f'!! {cfg.ids} non trovato: uso tutti i soggetti convertiti')
+    return None
+
+
+def converted_ids(cfg):
+    """The converted test cases, sorted, which is the order every stage follows."""
+    ids = test_ids(cfg)
+    return sorted(s for s in (os.path.basename(os.path.dirname(p))
+                              for p in glob.glob(os.path.join(cfg.converted, '*', 'center.json')))
+                  if ids is None or s in ids)
+
+
 def convert(cfg):
-    """Convert the raw dataset into CLIK's per-tooth layout (skips existing subjects)."""
+    """Convert the test cases into CLIK's per-tooth layout (skips existing subjects)."""
     from prepost_to_clik import convert_subject
+    ids = test_ids(cfg)
     dirs = sorted(d for d in glob.glob(os.path.join(cfg.dataset, 'Orthodontic_dental_dataset', '*'))
-                  if os.path.isdir(d))
+                  if os.path.isdir(d) and (ids is None or os.path.basename(d) in ids))
     if cfg.limit:
         dirs = dirs[:cfg.limit]
     todo = [d for d in dirs
@@ -104,8 +138,7 @@ def convert(cfg):
 def infer(cfg):
     """Run CLIK crown-only inference on every converted subject that lacks a result."""
     root = _clik_root()
-    sids = sorted(os.path.basename(os.path.dirname(p))
-                  for p in glob.glob(os.path.join(cfg.converted, '*', 'center.json')))
+    sids = converted_ids(cfg)
     todo = [s for s in sids
             if not os.path.exists(os.path.join(cfg.output, s, 'results', 'transformation.json'))]
     print(f'{len(sids)} soggetti, {len(todo)} da elaborare (~40 s ciascuno)')
@@ -119,7 +152,7 @@ def infer(cfg):
 
 def evaluate(cfg):
     """Score every prediction: the headline metrics and the detailed breakdown."""
-    py = sys.executable   # '-u': stream the child's output instead of buffering it
+    py = sys.executable
     subprocess.run([py, '-u', os.path.join(SCRIPTS, 'evaluate_alignment.py'),
                     '--converted', cfg.converted, '--output', cfg.output], check=True)
     subprocess.run([py, '-u', os.path.join(SCRIPTS, 'evaluate_detail.py'),
@@ -129,25 +162,25 @@ def evaluate(cfg):
 
 def diagnostics(cfg):
     """Localise the error: detector repeatability and accuracy, then the diffusion itself."""
-    py = sys.executable   # '-u': stream the child's output instead of buffering it
+    py = sys.executable
+    ids = ['--ids', cfg.ids] if os.path.exists(cfg.ids) else []
     subprocess.run([py, '-u', os.path.join(SCRIPTS, 'landmark_repeatability.py'),
-                    '--converted', cfg.converted, '--limit', str(cfg.diag_subjects),
+                    '--converted', cfg.converted, '--limit', str(cfg.diag_subjects), *ids,
                     '--out', os.path.join(cfg.data, 'landmark_repeatability.json')], check=True)
     for stage in ('ori', 'final'):
         suffix = '' if stage == 'ori' else '_final'
         subprocess.run([py, '-u', os.path.join(SCRIPTS, 'landmark_accuracy.py'),
-                        '--converted', cfg.converted, '--dataset', cfg.dataset, '--stage', stage,
+                        '--converted', cfg.converted, '--dataset', cfg.dataset, '--stage', stage, *ids,
                         '--out', os.path.join(cfg.data, f'landmark_accuracy{suffix}.json')], check=True)
     subprocess.run([py, '-u', os.path.join(SCRIPTS, 'diffusion_error.py'),
-                    '--converted', cfg.converted, '--limit', str(cfg.diag_subjects),
+                    '--converted', cfg.converted, '--limit', str(cfg.diag_subjects), *ids,
                     '--out', os.path.join(cfg.data, 'diffusion_error.json')], check=True)
 
 
 def seeds(cfg):
     """Repeat the inference with extra seeds and measure how much the result moves."""
     root = _clik_root()
-    sids = sorted(os.path.basename(os.path.dirname(p))
-                  for p in glob.glob(os.path.join(cfg.converted, '*', 'center.json')))[:cfg.diag_subjects]
+    sids = converted_ids(cfg)[:cfg.diag_subjects]
     runs = [cfg.output]
     for seed in cfg.seeds:
         out = os.path.join(os.path.dirname(cfg.output), f'seed_{seed}')
@@ -189,6 +222,8 @@ def main():
     ap.add_argument('--converted', default=os.path.join(HERE, 'data', 'Data_prepost'))
     ap.add_argument('--output', default=os.path.join(HERE, 'output', 'Output_prepost'))
     ap.add_argument('--report', default=os.path.join(HERE, 'report'))
+    ap.add_argument('--ids', default=None,
+                    help='file listing the cases to use (default: test_ids.txt in the dataset folder)')
     ap.add_argument('--stages', default=','.join(ALL_STAGES),
                     help='comma-separated: ' + ', '.join(ALL_STAGES))
     ap.add_argument('--with-seeds', action='store_true', help='include the seed study (slow)')
@@ -201,10 +236,9 @@ def main():
                          '(this is what makes the evaluate stage slow)')
     cfg = ap.parse_args()
 
-    for k in ('dataset', 'converted', 'output', 'report'):
+    cfg.ids = cfg.ids or os.path.join(cfg.dataset, 'test_ids.txt')
+    for k in ('dataset', 'converted', 'output', 'report', 'ids'):
         setattr(cfg, k, os.path.abspath(getattr(cfg, k)))
-    # the report folder holds only what gets shared; figures and the raw numbers
-    # that feed them live one level down
     cfg.figures = os.path.join(cfg.report, 'figures')
     cfg.data = os.path.join(cfg.report, 'data')
     for d in (cfg.report, cfg.figures, cfg.data):

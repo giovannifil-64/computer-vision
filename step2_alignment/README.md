@@ -1,4 +1,4 @@
-# Step 2: does CLIK align teeth as released?
+# Step 2: does CLIK align teeth as-is?
 
 Step 1 showed the landmark detector transfers reasonably to intra-oral scans. This step asks the question that actually matters: given a pre-treatment dentition, does CLIK move the teeth where the orthodontist's plan puts them?
 
@@ -10,7 +10,7 @@ Nothing is retrained here. This is CLIK exactly as the authors published it.
 
 Per tooth, mean and standard deviation over 246 subjects and 6223 teeth. "No movement" is the error you get by leaving every tooth exactly where it is, and it is the reference any useful prediction has to beat.
 
-| metric | CLIK as released | no movement | the paper, with a retrained detector |
+| metric | CLIK as-is | no movement | the paper, with a retrained detector |
 |---|---|---|---|
 | rotation | 11.00° ± 8.56 | 11.05° ± 10.27 | 6.69° ± 2.56 |
 | translation | 2.18 ± 1.56 | 2.01 ± 1.79 | 1.20 ± 0.44 |

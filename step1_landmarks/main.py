@@ -4,7 +4,10 @@ main
 Run the whole step-1 evaluation with one command: gather the Teeth3DS subjects
 that carry landmark annotations, convert them to CLIK's layout, run the detector,
 and score its landmarks against the 3DTeethLand ground truth, producing the
-renders along the way. Stages skip themselves when their output already exists.
+renders along the way. Gathering skips the files already copied and CLIK's
+inference, the slow part, skips the patients that already have their landmarks,
+so an interrupted run can be resumed; conversion, renders and evaluation are quick
+and are redone every time.
 
 Functions
 ---------
@@ -16,9 +19,9 @@ Functions
 Example
 -------
 ```bash
-python main.py                  # gather + full pipeline
-python main.py --stages pipeline    # only re-run the pipeline
-python main.py --limit 10       # quick pass on ten subjects
+python main.py                     # gather + full pipeline
+python main.py --stages pipeline   # only re-run the pipeline
+python main.py --limit 10          # quick pass on ten subjects
 ```
 
 Notes

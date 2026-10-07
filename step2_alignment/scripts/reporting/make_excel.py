@@ -21,11 +21,16 @@ Notes
 -----
 - Reads only files already produced by the evaluation, so it can be re-run at any
   time without recomputing anything.
+- The medians, the shares of cases and the counts of teeth come from
+  `alignment_metrics.csv`, so they always match the run being summarised. Only the
+  means and standard deviations per tooth, and the figures of the paper, are
+  written in, because they are not in that file.
 """
 import os
 import csv
 import json
 import argparse
+import statistics
 
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill
@@ -92,23 +97,40 @@ def main():
     wb = Workbook()
     wb.remove(wb.active)
 
+    csv_path = os.path.join(args.output, 'alignment_metrics.csv')
+    cases = list(csv.DictReader(open(csv_path))) if os.path.exists(csv_path) else []
+
+    def median(key):
+        return round(statistics.median(float(r[key]) for r in cases), 2)
+
+    def share(key, base):
+        return round(100 * sum(float(r[key]) < float(r[base]) for r in cases) / len(cases))
+
+    def total(key):
+        return sum(int(r[key]) for r in cases)
+
     # ---- headline metrics -------------------------------------------------
-    sheet(wb, 'Riepilogo', [
+    rows = [
         ['Metrica (per dente, media +/- dev.std)', 'CLIK as-is', 'Nessun movimento', 'Paper (detector ri-addestrato)'],
         ['Rotazione (gradi)', '11.00 +/- 8.56', '11.05 +/- 10.27', '6.69 +/- 2.56'],
         ['Traslazione', '2.18 +/- 1.56', '2.01 +/- 1.79', '1.20 +/- 0.44'],
         ['Point cloud (mm)', '3.10 +/- 2.18', '2.15 +/- 2.06', '1.30 +/- 0.68'],
-        [],
-        ['Mediane e tasso di vittoria', 'CLIK', 'Nessun movimento', 'CLIK migliore su'],
-        ['Rotazione (gradi)', 8.99, 8.59, '48% dei denti'],
-        ['Traslazione', 1.81, 1.58, '43% dei denti'],
-        ['Point cloud (mm)', 2.47, 1.53, '24% dei denti'],
-        [],
-        ['Soggetti valutati', 246],
-        ['Denti valutati', 6223],
-        ['Denti esclusi - estratti durante il trattamento', 310],
-        ['Denti esclusi - rimeshati tra i due stadi', 93],
-    ], widths=[46, 18, 20, 30],
+    ]
+    if cases:
+        rows += [
+            [],
+            ['Mediane per caso', 'CLIK', 'Nessun movimento', 'CLIK migliore in'],
+            *[[label, median(key), median(base), f'{share(key, base)}% dei casi']
+              for label, key, base in (('Rotazione (gradi)', 'rot_err', 'rot_baseline'),
+                                       ('Traslazione', 'trans_err', 'trans_baseline'),
+                                       ('Point cloud (mm)', 'pcd_err', 'pcd_baseline'))],
+            [],
+            ['Casi valutati', len(cases)],
+            ['Denti valutati', total('n_teeth')],
+            ['Denti esclusi - assenti dal piano simulato', total('skipped_extracted')],
+            ['Denti esclusi - numero di vertici diverso tra i due stadi', total('skipped_mismatch')],
+        ]
+    sheet(wb, 'Riepilogo', rows, widths=[52, 18, 20, 30],
         note='"Nessun movimento" = errore che si otterrebbe lasciando ogni dente dove si trova; e\' il riferimento che una predizione utile deve battere. '
              'Test as-is: pesi pre-addestrati, nessun fine-tuning, modalita\' crown-only (le scansioni intraorali non hanno le radici).')
 
@@ -197,14 +219,17 @@ def main():
 
         exc = ex.get('excluded', {})
         if exc:
-            disp = exc.get('displacement_applied_to_extracted_teeth_mm') or {}
-            sheet(wb, 'Denti esclusi', [['Categoria', 'Denti', 'Nota']] +
-                  [['Terzi molari', exc.get('third_molars_never_predicted', 0),
-                    'lo schema di CLIK copre 28 denti: non vengono mai predetti'],
-                   ['Estratti durante il trattamento', exc.get('teeth_extracted_during_treatment', 0),
-                    f"assenti nel post; CLIK non lo sa e li sposta comunque di {round(disp.get('median', 0), 2)} mm mediani"],
-                   ['Rimeshati fra i due stadi', 93, 'niente corrispondenza vertice-a-vertice, esclusi dalle metriche']],
-                  widths=[34, 10, 78])
+            disp = exc.get('centroid_displacement_of_absent_teeth_mm') or {}
+            rows = [['Categoria', 'Denti', 'Nota'],
+                    ['Terzi molari', exc.get('third_molars_never_predicted', 0),
+                     'lo schema di CLIK copre 28 denti: non vengono mai predetti'],
+                    ['Assenti dal piano simulato', exc.get('absent_from_target_besides_third_molars', 0),
+                     f"oltre ai {exc.get('absent_third_molars', 0)} terzi molari assenti; i dati non dicono se "
+                     f"siano stati estratti, e CLIK li sposta comunque di {round(disp.get('median', 0), 2)} mm mediani"]]
+            if cases:
+                rows.append(['Numero di vertici diverso fra i due stadi', total('skipped_mismatch'),
+                             'niente corrispondenza vertice-a-vertice, esclusi dalle metriche'])
+            sheet(wb, 'Denti esclusi', rows, widths=[38, 10, 90])
 
     # ---- seed variability -------------------------------------------------
     sv_path = os.path.join(args.data, 'seed_variability.json')
@@ -217,7 +242,7 @@ def main():
                  ['Dispersione fra seed (rotazione, gradi)', round(sv['rot_std_deg'], 4)],
                  ['Soggetti', sv['n_subjects']]]
         sheet(wb, 'Variabilita seed', rows, widths=[38, 26],
-              note='La diffusion e\' generativa, quindi ogni esecuzione campiona diversamente. Il divario dal baseline e\' circa 11 volte la dispersione fra seed: '
+              note='La diffusion e\' generativa, quindi ogni esecuzione campiona diversamente. Il divario dal baseline e\' circa quindici volte la dispersione fra seed: '
                    'l\'errore misurato e\' sistematico e non rumore, e valutare con un solo seed era affidabile.')
 
     # ---- per-subject alignment -------------------------------------------

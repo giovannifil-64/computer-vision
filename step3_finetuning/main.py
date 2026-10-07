@@ -32,7 +32,9 @@ python main.py --stages b --epochs 100          # fine-tune
 
 Notes
 -----
-- Every stage skips work whose output already exists, so a run can be resumed.
+- The long stages resume instead of starting over: stage A skips the cases whose
+  tensors already exist, and stage B continues from the `last.pt` it finds in its
+  output folder. Stages C and D and the evaluation are recomputed every time.
 - Force a device with the `CLIK_DEVICE` environment variable (`cpu`, `mps`, `cuda`).
 """
 import os
@@ -47,7 +49,7 @@ BASE = os.path.dirname(HERE)
 STEP2 = os.path.join(BASE, 'step2_alignment')
 
 ALL_STAGES = ['a', 'b', 'c', 'd', 'evaluate']
-TERMS = ('arch', 'contact', 'individual')      # the clinical constraints, see losses.py
+TERMS = ('arch', 'contact', 'individual')
 
 
 def run(name, fn):

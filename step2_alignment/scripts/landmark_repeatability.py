@@ -156,11 +156,15 @@ def main():
     ap = argparse.ArgumentParser(description="Stage-1 landmark repeatability under rigid motion.")
     ap.add_argument('--converted', required=True)
     ap.add_argument('--limit', type=int, default=0, help='max subjects (0 = all)')
+    ap.add_argument('--ids', default=None, help='file listing the cases to use, one per line (default: all)')
     ap.add_argument('--out', default=None, help='optional JSON summary path')
     args = ap.parse_args()
 
     sids = sorted(os.path.basename(os.path.dirname(p))
                   for p in glob.glob(os.path.join(args.converted, '*', 'center.json')))
+    if args.ids:
+        wanted = {l.strip() for l in open(args.ids) if l.strip()}
+        sids = [s for s in sids if s in wanted]
     if args.limit:
         sids = sids[:args.limit]
 

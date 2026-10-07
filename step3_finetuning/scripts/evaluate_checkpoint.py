@@ -9,6 +9,14 @@ checkpoint via its `--diffusion_ckpt` option, so nothing in the method changes
 apart from the weights being tested. Scoring reuses the step-2 evaluation, which
 means the fine-tuned and the as-is numbers are produced by identical code.
 
+CLIK's own loader reads the checkpoint with `strict=False`, which means that a
+checkpoint written by stage B, where the weights sit under `model` next to the
+optimizer state, would load nothing and leave a randomly initialised network, with
+no error and plausible-looking results. So the weights are first unwrapped into a
+plain file and checked against CLIK's own network, and only that file is handed to
+`infer_crown.py`. The check uses the authors' classes, not stage C, so the script
+stays independent of the code it is meant to verify.
+
 For routine work the stage C/D path is the one to use: it is two and a half times
 faster and produces the same transforms to four decimal places. This script earns
 its keep as the *independent* check: it shares no code with stages C and D, so
@@ -19,6 +27,7 @@ sampling or the rigid solve.
 Functions
 ---------
 - `test_subjects(converted_root, ids_file)`: The test-split subjects available locally.
+- `plain_weights(ckpt, out_root)`: The checkpoint as CLIK's loader expects it, checked.
 - `run_inference(ckpt, sids, converted_root, out_root)`: Inference with the given weights.
 - `compare(as_is_csv, tuned_csv, sids)`: Side-by-side medians on the same subjects.
 - `main()`: Run inference, score, and print the comparison.
@@ -91,6 +100,49 @@ def test_subjects(converted_root, ids_file, limit=0):
                   for p in glob.glob(os.path.join(converted_root, '*', 'center.json')))
     sids = [s for s in have if s in wanted]
     return sids[:limit] if limit else sids
+
+
+def plain_weights(ckpt, out_root):
+    """
+    The checkpoint as CLIK's own loader expects it: a bare state dict that fills the network.
+
+    Parameters
+    ----------
+    - `ckpt (str)`: A released checkpoint, or one written by stage B.
+    - `out_root (str)`: Where to write the unwrapped weights, when unwrapping is needed.
+
+    Returns
+    -------
+    - `str`: `ckpt` itself if it already is a bare state dict, otherwise the path of
+      the unwrapped copy.
+
+    Raises
+    ------
+    - `RuntimeError`: If the weights do not populate CLIK's diffusion network.
+    """
+    import torch
+    sys.path.insert(0, os.path.join(ROOT, 'Code'))
+    from s2_LandmarkDiffusion import diffusion_cfgs, Network
+
+    state = torch.load(ckpt, map_location='cpu')
+    wrapped = False
+    for key in ('model', 'state_dict', 'net'):
+        if isinstance(state, dict) and key in state and isinstance(state[key], dict):
+            state, wrapped = state[key], True
+            break
+
+    net = Network(diffusion_cfgs['unet'], diffusion_cfgs['beta_schedule'])
+    missing, unexpected = net.load_state_dict(state, strict=False)
+    loaded = len(net.state_dict()) - len(missing)
+    if loaded < len(net.state_dict()) // 2:
+        raise RuntimeError(f'{ckpt}: only {loaded}/{len(net.state_dict())} tensors '
+                           f'would load ({len(unexpected)} unrecognised keys)')
+    if not wrapped:
+        return ckpt
+    path = os.path.join(out_root, 'weights_for_infer_crown.pth')
+    torch.save(state, path)
+    print(f'unwrapped the training checkpoint into {path}', flush=True)
+    return path
 
 
 def run_inference(ckpt, sids, converted_root, out_root):
@@ -167,15 +219,13 @@ def main():
     ap.add_argument('--limit', type=int, default=0, help='evaluate only the first N subjects')
     args = ap.parse_args()
 
-    # infer_crown runs with CLIK's working directory, so every path handed to a
-    # subprocess must be absolute or it resolves against the wrong folder
     for k in ('ckpt', 'out', 'converted', 'as_is', 'ids'):
         setattr(args, k, os.path.abspath(getattr(args, k)))
     sids = test_subjects(args.converted, args.ids, args.limit)
     os.makedirs(args.out, exist_ok=True)
 
     t0 = time.time()
-    run_inference(args.ckpt, sids, args.converted, args.out)
+    run_inference(plain_weights(args.ckpt, args.out), sids, args.converted, args.out)
     print(f'inference finished in {(time.time() - t0) / 60:.0f} min', flush=True)
 
     subprocess.run([sys.executable, '-u', os.path.join(STEP2, 'scripts', 'evaluate_alignment.py'),

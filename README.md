@@ -77,13 +77,17 @@ Yes, partly: the fine-tuned model beats leaving the teeth in place in 70% of the
 ## Structure
 
 ```
-CLIK-Diffusion/        submodule: fork of the original method, patched for CPU and MPS
-datasets/              not in the repository, see above
-step1_landmarks/       landmark quality on intra-oral scans
-step2_alignment/       the method as-is, on pre and post treatment pairs
-step3_finetuning/      fine-tuning the diffusion model, and what it buys
-papers/                the method paper and the papers of the two datasets
-report/                the written report, as a PDF, with its LaTeX source in src/
+computer-vision/
+├── Click-Diffusion/    # Submodule: fork of the original method, patched for CPU and MPS
+├── datasets/           # Not in the repository, see above
+├── report/             # The written report, as a PDF, with its LaTeX source in src/
+├── step1_landmarks/    # landmark quality on intra-oral scans
+├── step2_alignment/    # the method as-is, on pre and post treatment pairs
+├── step3_finetuning/   # fine-tuning the diffusion model, and what it buys
+├── .gitmodules         # Git submodule metadata
+├── LICENSE             # License information
+├── README.md           # This file
+└── requirements.txt    # Dependencies
 ```
 
 Each step keeps `scripts/` for its code, `data/` for converted input, `output/` for results and `report/` for what is meant to be shared. Only the last is versioned.

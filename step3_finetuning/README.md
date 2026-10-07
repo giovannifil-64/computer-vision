@@ -1,6 +1,6 @@
 # Step 3: fine-tuning CLIK on intra-oral data
 
-Step 2 established that CLIK, applied as released to the intra-oral scans of PrePostOrthodontic, does no better than leaving the teeth where they are. Here the diffusion model alone is retrained, not the landmark detector, to see whether that makes it usable.
+Step 2 established that CLIK, applied as-is to the intra-oral scans of PrePostOrthodontic, does no better than leaving the teeth where they are. Here the diffusion model alone is retrained, not the landmark detector, to see whether that makes it usable.
 
 It makes it useful but not decisive, and the search for the remaining error turned up something about the published method that matters more than the fine-tuning itself.
 
@@ -8,7 +8,7 @@ It makes it useful but not decisive, and the search for the remaining error turn
 
 Compared over **246 test subjects**, paired: both arms share the same landmark detection, so the only thing that differs is the diffusion weights.
 
-| metric | as released | fine-tuned | no movement |
+| metric | as-is | fine-tuned | no movement |
 |---|---|---|---|
 | rotation | 9.28° | **7.38°** | 9.49° |
 | translation | 1.84 | **1.32** | 1.76 |
@@ -18,10 +18,10 @@ Medians alone flatter the model, so the honest figure is how often it helps a gi
 
 | beats leaving the teeth alone in | rotation | translation | point cloud |
 |---|---|---|---|
-| as released | 44% of patients | 33% | 17% |
+| as-is | 44% of cases | 33% | 17% |
 | fine-tuned | **70%** | **69%** | **55%** |
 
-That is a large gain and a real one, with p on the order of 1e-32, but on point cloud accuracy it is still close to a coin toss: for 110 of 246 patients, applying the prediction is worse than not intervening.
+That is a large gain and a real one, with p on the order of 1e-32, but on point cloud accuracy it is still close to a coin toss: for 110 of 246 cases, applying the prediction is worse than not intervening.
 
 A harder reference moves every tooth by the average motion of its position over the 703 training cases (`scripts/mean_motion_baseline.py`). It already beats not intervening (8.58°, 1.68, 1.65 mm), and the fine-tuned model beats it clearly on rotation and translation (72% of subjects, p < 1e-15) but not on point cloud (55%, p = 0.28): in position the model is not yet better than a prediction that ignores the patient.
 
@@ -34,7 +34,7 @@ How far neighbouring teeth end up inside one another, over the first 40 test sub
 | dentition | median penetration | points inside a neighbour |
 |---|---|---|
 | before treatment | 0.003 mm | 0.24% |
-| CLIK as released | 0.397 mm | 4.26% |
+| CLIK as-is | 0.397 mm | 4.26% |
 | CLIK fine-tuned | 0.325 mm | 3.24% |
 | simulated target | 0.141 mm | 1.00% |
 
@@ -44,7 +44,7 @@ How far neighbouring teeth end up inside one another, over the first 40 test sub
 
 Looking for the missing accuracy turned up this. Feed the network eight very different noisy inputs at the same noise level and its prediction moves by four ten-thousandths of the variation it was given, at every level from pure noise to almost-the-answer. The network does not read its own iterate.
 
-The consequence is testable and it holds: **one denoising step gives the same answer as all 2000.** On the fine-tuned model, 7.35° against 7.40°, all three metrics within 1% and none of it significant. On the **released weights**, 9.27° against 9.28°: this is a property of the published model, not something the fine-tuning caused. Sampling drops from 16.2 s per subject to nothing.
+The consequence is testable and it holds: **one denoising step gives the same answer as all 2000.** On a model fine-tuned for 100 epochs, 7.35° against 7.40°, all three metrics within 1% and none of it significant, and the final model gives 7.36° against 7.35°. On the **released weights**, 9.27° against 9.28°: this is a property of the published model, not something the fine-tuning caused. Sampling drops from 16.2 s per subject to nothing.
 
 It explains three things that had looked unrelated: why changing the random seed moves the predicted landmarks by a median of 38 microns, why 200 steps were already enough, and why the model is timid.
 
@@ -110,7 +110,7 @@ Sampling takes `--steps`. The default is the full 2000; `--steps 200` is ten tim
 | `calibration.pdf` | Predicted motion against the target motion, per tooth, over all 246 test subjects. Translation nearly calibrated at 0.86, rotation held back at 0.64. |
 | `ablation.pdf` | Median error per clinical constraint, against the base loss and against no movement. |
 | `training.pdf` | Training and validation loss of the reconstruction-only run and of the final 300-epoch model. Validation is flat after ten to twenty epochs; the training curve of the final model includes the orientation constraint, so its two curves are not on the same footing. |
-| `<id>_comparison.png` | One dentition in four columns: before, as released, fine-tuned, and the simulated target. Best, median and worst case. |
+| `<id>_comparison.png` | One dentition in four columns: before, as-is, fine-tuned, and the simulated target. Best, median and worst case. |
 
 ```bash
 python scripts/reporting/make_charts.py --as-is output/asis_split \

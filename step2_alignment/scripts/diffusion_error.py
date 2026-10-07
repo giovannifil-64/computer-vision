@@ -130,16 +130,16 @@ def evaluate_subject(sid, converted_root, models, network):
         B = load_mesh(f_fin, process=False).vertices
         if A.shape != B.shape:
             continue
-        R, t, _ = kabsch(A, B)                       # ground-truth motion, mm
+        R, t, _ = kabsch(A, B)
 
         s, e = util.landmark_slices[i], util.landmark_slices[i + 1]
-        idx = [i] + list(range(s, e))                # centroid + this tooth's landmarks
-        L_ini = initial[:, idx].T * SCALE            # mm
-        L_pred = predicted[:, idx].T * SCALE         # mm
-        L_ideal = (R @ L_ini.T).T + t                # where they should have gone
+        idx = [i] + list(range(s, e))
+        L_ini = initial[:, idx].T * SCALE
+        L_pred = predicted[:, idx].T * SCALE
+        L_ideal = (R @ L_ini.T).T + tid
 
         diff.append(np.linalg.norm(L_pred - L_ideal, axis=1))
-        Rp, tp, rms = kabsch(L_ini, L_pred)          # best rigid fit of the prediction
+        Rp, tp, rms = kabsch(L_ini, L_pred)
         resid.append(rms)
 
     if not diff:
@@ -153,11 +153,16 @@ def main():
     ap = argparse.ArgumentParser(description="Isolate the diffusion stage error, in landmark space.")
     ap.add_argument('--converted', required=True)
     ap.add_argument('--limit', type=int, default=40)
+    ap.add_argument('--ids', default=None, help='file listing the cases to use, one per line (default: all)')
     ap.add_argument('--out', default=None)
     args = ap.parse_args()
 
     sids = sorted(os.path.basename(os.path.dirname(p))
-                  for p in glob.glob(os.path.join(args.converted, '*', 'center.json')))[:args.limit]
+                  for p in glob.glob(os.path.join(args.converted, '*', 'center.json')))
+    if args.ids:
+        wanted = {l.strip() for l in open(args.ids) if l.strip()}
+        sids = [s for s in sids if s in wanted]
+    sids = sids[:args.limit]
 
     print('Loading networks...')
     models = load_detection(**CKPTS)
