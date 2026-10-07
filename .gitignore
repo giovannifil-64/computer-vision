@@ -1,5 +1,6 @@
 .DS_Store
 __pycache__/
+.vscode/
 
 # Datasets (clinical data, several GB, never commit)
 datasets/
@@ -12,15 +13,5 @@ step2_alignment/output/
 step3_finetuning/data/
 step3_finetuning/output/
 
-# Papers (redistribution not ours to make)
-papers/
-
-/report/
-
-docstring.template
-
-.vscode/
-_unused/
-
-# dati grezzi e log si rigenerano a ogni run
+# raw data and logs that are regenerated at every run
 step2_alignment/report/data/
